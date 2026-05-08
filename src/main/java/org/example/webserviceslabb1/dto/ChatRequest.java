@@ -1,6 +1,8 @@
 package org.example.webserviceslabb1.dto;
 
-public record ChatRequest(String personality,
-                          String message) {
-
+public record ChatRequest(
+        String personality,
+        String message,
+        String sessionId
+) {
 }

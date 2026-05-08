@@ -3,21 +3,39 @@ package org.example.webserviceslabb1.client;
 import org.example.webserviceslabb1.client.dto.Message;
 import org.example.webserviceslabb1.client.dto.OpenRouterRequest;
 import org.example.webserviceslabb1.client.dto.OpenRouterResponse;
+import org.example.webserviceslabb1.service.ChatMemoryService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Client responsible for communication with the OpenRouter API.
+ * <p>
+ * Builds AI chat requests using a selected personality,
+ * previous conversation history and the latest user message.
+ * <p>
+ * Sends requests using Spring RestClient and extracts
+ * the assistant response from the API response body.
+ * <p>
+ * Conversation history is stored in memory per session id
+ * through ChatMemoryService.
+ */
 @Component
 public class OpenRouterClient {
 
     private final RestClient restClient;
+    private final ChatMemoryService chatMemoryService;
 
     public OpenRouterClient(
             @Value("${openrouter.base-url}") String baseUrl,
-            @Value("${openrouter.api-key}") String apiKey
+            @Value("${openrouter.api-key}") String apiKey,
+            ChatMemoryService chatMemoryService
     ) {
+
+        this.chatMemoryService = chatMemoryService;
 
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
@@ -28,21 +46,38 @@ public class OpenRouterClient {
                 .build();
     }
 
-    public String ask(String personality, String userMessage) {
+    public String ask(
+            String personality,
+            String userMessage,
+            String sessionId
+    ) {
+
+        List<Message> messages = new ArrayList<>();
+
+        messages.add(
+                new Message(
+                        "system",
+                        getSystemPrompt(personality)
+                )
+        );
+
+        List<Message> previousMessages =
+                chatMemoryService.getMessages(sessionId);
+
+        messages.addAll(previousMessages);
+
+        Message userMsg =
+                new Message(
+                        "user",
+                        userMessage
+                );
+
+        messages.add(userMsg);
 
         OpenRouterRequest request =
                 new OpenRouterRequest(
                         "openai/gpt-4o-mini",
-                        List.of(
-                                new Message(
-                                        "system",
-                                        getSystemPrompt(personality)
-                                ),
-                                new Message(
-                                        "user",
-                                        userMessage
-                                )
-                        )
+                        messages
                 );
 
         try {
@@ -59,31 +94,47 @@ public class OpenRouterClient {
                     || response.choices().isEmpty()) {
 
                 return """
-                    AI service returned an empty response.
-                    
-                    Please try again later.
-                    """;
+                        AI service returned an empty response.
+                        
+                        Please try again later.
+                        """;
             }
 
-            return response
-                    .choices()
-                    .getFirst()
-                    .message()
-                    .content();
+            String assistantReply =
+                    response
+                            .choices()
+                            .getFirst()
+                            .message()
+                            .content();
+
+            chatMemoryService.addMessage(
+                    sessionId,
+                    userMsg
+            );
+
+            chatMemoryService.addMessage(
+                    sessionId,
+                    new Message(
+                            "assistant",
+                            assistantReply
+                    )
+            );
+
+            return assistantReply;
 
         } catch (Exception e) {
 
             return """
-                The AI service is currently unavailable.
-                
-                This may be caused by:
-                - temporary network issues
-                - rate limiting
-                - unavailable upstream provider
-                - invalid or missing API credits
-                
-                Please try again later.
-                """;
+                    The AI service is currently unavailable.
+                    
+                    This may be caused by:
+                    - temporary network issues
+                    - rate limiting
+                    - unavailable upstream provider
+                    - invalid or missing API credits
+                    
+                    Please try again later.
+                    """;
         }
     }
 
@@ -95,17 +146,13 @@ public class OpenRouterClient {
 
         return switch (personality.toLowerCase()) {
 
-            case "coder" ->
-                    "You are a skilled Java developer who explains things clearly.";
+            case "coder" -> "You are a skilled Java developer who explains things clearly.";
 
-            case "gordon ramsay" ->
-                    "You speak like Gordon Ramsay.";
+            case "gordon ramsay" -> "You speak like Gordon Ramsay.";
 
-            case "backwards" ->
-                    "You must answer every response with the words written in reverse order.";
+            case "backwards" -> "You must answer every response with the words written in reverse order.";
 
-            default ->
-                    "You are a generic AI assistant.";
+            default -> "You are a generic AI assistant.";
         };
     }
 }
