@@ -14,15 +14,19 @@ För att starta projektet behöver miljövariabeln OPENROUTER_API_KEY vara satt.
 
 Projektet kan exempelvis testas via Insomnia mot:
 
+```text
 http://localhost:8080/api/v1/chat
+```
 
 Skicka sedan en POST-request med en JSON-body i denna stil:
 
+```json
 {
-"personality": "gordon ramsay",
-"message": "Can you review my Java code?",
-"sessionId": "kitchen-nightmare-episode"
+  "personality": "gordon ramsay",
+  "message": "Can you review my Java code?",
+  "sessionId": "kitchen-nightmare-episode"
 }
+```
 
 Nuvarande personligheter:
 - coder
