@@ -4,9 +4,12 @@ import org.example.webserviceslabb1.client.dto.Message;
 import org.example.webserviceslabb1.client.dto.OpenRouterRequest;
 import org.example.webserviceslabb1.client.dto.OpenRouterResponse;
 import org.example.webserviceslabb1.service.ChatMemoryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +28,27 @@ import java.util.List;
  */
 @Component
 public class OpenRouterClient {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(OpenRouterClient.class);
+
+    private static final String EMPTY_RESPONSE_MESSAGE = """
+            AI service returned an empty response.
+            
+            Please try again later.
+            """;
+
+    private static final String ERROR_MESSAGE = """
+            The AI service is currently unavailable.
+            
+            This may be caused by:
+            - temporary network issues
+            - rate limiting
+            - unavailable upstream provider
+            - invalid or missing API credits
+            
+            Please try again later.
+            """;
 
     private final RestClient restClient;
     private final ChatMemoryService chatMemoryService;
@@ -93,19 +117,24 @@ public class OpenRouterClient {
                     || response.choices() == null
                     || response.choices().isEmpty()) {
 
-                return """
-                        AI service returned an empty response.
-                        
-                        Please try again later.
-                        """;
+                return EMPTY_RESPONSE_MESSAGE;
             }
 
-            String assistantReply =
+            Message assistantMessage =
                     response
                             .choices()
                             .getFirst()
-                            .message()
-                            .content();
+                            .message();
+
+            if (assistantMessage == null
+                    || assistantMessage.content() == null
+                    || assistantMessage.content().isBlank()) {
+
+                return EMPTY_RESPONSE_MESSAGE;
+            }
+
+            String assistantReply =
+                    assistantMessage.content();
 
             chatMemoryService.addMessage(
                     sessionId,
@@ -122,19 +151,25 @@ public class OpenRouterClient {
 
             return assistantReply;
 
+        } catch (RestClientException e) {
+
+            log.warn(
+                    "OpenRouter request failed for sessionId={}",
+                    sessionId,
+                    e
+            );
+
+            return ERROR_MESSAGE;
+
         } catch (Exception e) {
 
-            return """
-                    The AI service is currently unavailable.
-                    
-                    This may be caused by:
-                    - temporary network issues
-                    - rate limiting
-                    - unavailable upstream provider
-                    - invalid or missing API credits
-                    
-                    Please try again later.
-                    """;
+            log.error(
+                    "Unexpected error in OpenRouterClient for sessionId={}",
+                    sessionId,
+                    e
+            );
+
+            return ERROR_MESSAGE;
         }
     }
 

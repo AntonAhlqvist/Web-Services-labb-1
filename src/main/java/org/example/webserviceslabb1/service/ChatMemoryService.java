@@ -3,10 +3,8 @@ package org.example.webserviceslabb1.service;
 import org.example.webserviceslabb1.client.dto.Message;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Stores chat history in memory per session id.
@@ -22,18 +20,25 @@ import java.util.Map;
 public class ChatMemoryService {
 
     private final Map<String, List<Message>> memory =
-            new HashMap<>();
+            new ConcurrentHashMap<>();
 
     public List<Message> getMessages(String sessionId) {
 
         if (sessionId == null || sessionId.isBlank()) {
-            return new ArrayList<>();
+            return List.of();
         }
 
-        return memory.computeIfAbsent(
-                sessionId,
-                id -> new ArrayList<>()
-        );
+        List<Message> messages =
+                memory.computeIfAbsent(
+                        sessionId,
+                        id -> Collections.synchronizedList(
+                                new ArrayList<>()
+                        )
+                );
+
+        synchronized (messages) {
+            return new ArrayList<>(messages);
+        }
     }
 
     public void addMessage(
@@ -41,13 +46,18 @@ public class ChatMemoryService {
             Message message
     ) {
 
-        if (sessionId == null || sessionId.isBlank()) {
+        if (sessionId == null
+                || sessionId.isBlank()
+                || message == null) {
+
             return;
         }
 
         memory.computeIfAbsent(
                 sessionId,
-                id -> new ArrayList<>()
+                id -> Collections.synchronizedList(
+                        new ArrayList<>()
+                )
         ).add(message);
     }
 }
