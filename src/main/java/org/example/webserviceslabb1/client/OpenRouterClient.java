@@ -7,10 +7,13 @@ import org.example.webserviceslabb1.service.ChatMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,8 +23,12 @@ import java.util.List;
  * Builds AI chat requests using a selected personality,
  * previous conversation history and the latest user message.
  * <p>
- * Sends requests using Spring RestClient and extracts
- * the assistant response from the API response body.
+ * Sends requests using Spring RestClient, applies timeout
+ * configuration and extracts the assistant response
+ * from the API response body.
+ * <p>
+ * Handles upstream API failures gracefully through
+ * logging and fallback error responses.
  * <p>
  * Conversation history is stored in memory per session id
  * through ChatMemoryService.
@@ -61,8 +68,19 @@ public class OpenRouterClient {
 
         this.chatMemoryService = chatMemoryService;
 
+        HttpClient httpClient =
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(5))
+                        .build();
+
+        JdkClientHttpRequestFactory requestFactory =
+                new JdkClientHttpRequestFactory(httpClient);
+
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
+
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
                 .defaultHeader(
                         "Authorization",
                         "Bearer " + apiKey
